@@ -33,7 +33,7 @@ cache.on('files deleted', function(files) {
 	// etc..
 });
 
-cache.init(function(err, watcher) {
+cache.init(function(err) {
 	if (err !== null) 
 		console.log('ahhhhhhhhhhhh!', err);
 });
