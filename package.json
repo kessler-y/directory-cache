@@ -1,6 +1,6 @@
 {
     "name": "directory-cache",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "A directory caching util",
     "main": "lib/DirectoryCache.js",
     "dependencies": {    
