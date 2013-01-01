@@ -33,10 +33,14 @@ cache.on('files deleted', function(files) {
 	// etc..
 });
 
-DirectoryWatcher.init(function(err, watcher) {
+cache.init(function(err, watcher) {
 	if (err !== null) 
 		console.log('ahhhhhhhhhhhh!', err);
 });
+
+var content = cache.getFileContent('moo.txt'); // returns the content of /path/to/the/moon/moo.txt
+
+var files = cache.getFiles(); // returns all the files in /path/to/the/moon
 
 ```
 
