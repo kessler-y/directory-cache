@@ -60,13 +60,7 @@ var suite = vows.describe('DirectoryCache').addBatch({
 			assert.strictEqual(cache.getFileContent('1.file'), DEFAULT_FILE_CONTENT);
 			assert.strictEqual(cache.getFileContent('2.txt'), DEFAULT_FILE_CONTENT);
 			assert.strictEqual(cache.getFileContent('x.json').x, 1);		
-		},
-		'check that count and keys are updated propely': function(err, cache) {
-
-			assert.strictEqual(cache.count, 3);				
-			assert.includes(cache.getFiles(), '1.file', '2.txt', 'x.json');
-
-		},
+		},		
 		'when a file is added it should reflect in the cache': {
 			topic: function(err, cache) {				
 				this.cache = cache;
@@ -76,11 +70,7 @@ var suite = vows.describe('DirectoryCache').addBatch({
 			'callback': function(files) {
 				assert.lengthOf(files, 1);
 				assert.includes(files, 'g.t');
-			},
-			'check count and keys are updated properly': function(files) {				
-				assert.strictEqual(this.count, 4);				
-				assert.includes(this.getFiles(), '1.file', '2.txt', 'x.json', 'g.t');
-			},
+			},			
 			'when a file is deleted it should reflect in the cache': {
 				topic: function () {
 					this.cache.once('files deleted', this.callback);
@@ -151,7 +141,9 @@ suite.addBatch({
 		'check files are filtered properly': function(err, cache) {
 			var files = cache.getFiles();
 			assert.lengthOf(files, 3);
-			assert.includes(files, '1.file', 'g.t', '2.txt');
+			assert.includes(files, '1.file');
+			assert.includes(files, 'g.t');
+			assert.includes(files, '2.txt');
 		},
 		teardown: function(err, cache) {
 			cache.stop();
@@ -160,6 +152,131 @@ suite.addBatch({
 })
 
 
+suite.addBatch({
+	'count and keys are update properly at initialization': {
+		topic: function() {				
+			
+			var params = {
+				directory: TEST_DIR
+			};
+
+			var cache = DirectoryCache.create(params);						
+
+			cache.init(this.callback);
+		}, 
+		'init callback': function(err, topic) {
+			
+			assert.strictEqual(topic.count, 4);				
+			var files = topic.getFiles();
+			assert.includes(files, '1.file');
+			assert.includes(files, '2.txt');
+			assert.includes(files, 'y.json');
+			assert.includes(files, 'g.t');
+		},
+		teardown: function(err, cache) {
+			cache.stop();
+		}		
+	}
+});
+
+suite.addBatch({
+	'count and keys are update properly at when files are added': {
+		topic: function() {				
+			
+			var params = {
+				directory: TEST_DIR
+			};
+
+			this.cache = DirectoryCache.create(params);						
+
+			this.cache.init(this.callback);
+		}, 
+		'init callback': {
+			topic: function(err, topic) {
+				topic.once('files added', this.callback);
+				writeTestFile('t.j');
+			},
+			'added callback': function(files) {
+				assert.strictEqual(this.count, 5);				
+				var files = this.getFiles();
+				assert.includes(files, '1.file');
+				assert.includes(files, '2.txt');
+				assert.includes(files, 'y.json');
+				assert.includes(files, 'g.t');
+				assert.includes(files, 't.j');
+			},
+			teardown: function() {
+				this.cache.stop();
+			}		
+		}
+	}
+});
+
+
+suite.addBatch({
+	'count and keys are update properly at when files are Deleted': {
+		topic: function() {				
+			
+			var params = {
+				directory: TEST_DIR
+			};
+
+			this.cache = DirectoryCache.create(params);						
+
+			this.cache.init(this.callback);
+		}, 
+		'init callback': {
+			topic: function(err, topic) {
+				topic.once('files deleted', this.callback);
+				deleteTestFile('t.j');
+			},
+			'added callback': function(files) {
+				assert.strictEqual(this.count, 4);				
+				var files = this.getFiles();
+				assert.includes(files, '1.file');
+				assert.includes(files, '2.txt');
+				assert.includes(files, 'y.json');
+				assert.includes(files, 'g.t');
+			},
+			teardown: function() {
+				this.cache.stop();
+			}		
+		}
+	}
+});
+
+
+suite.addBatch({
+	'count and keys remain the same when files are only changed': {
+		topic: function() {				
+			
+			var params = {
+				directory: TEST_DIR
+			};
+
+			this.cache = DirectoryCache.create(params);						
+
+			this.cache.init(this.callback);
+		}, 
+		'init callback': {
+			topic: function(err, topic) {
+				topic.once('files changed', this.callback);
+				writeTestFile('g.t');
+			},
+			'added callback': function(files) {
+				assert.strictEqual(this.count, 4);				
+				var files = this.getFiles();
+				assert.includes(files, '1.file');
+				assert.includes(files, '2.txt');
+				assert.includes(files, 'y.json');
+				assert.includes(files, 'g.t');
+			},
+			teardown: function() {
+				this.cache.stop();
+			}		
+		}
+	}
+});
 
 suite.options.error =false;
 
