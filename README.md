@@ -1,4 +1,4 @@
-DirectoryWatcher
+Directory Cache
 ================
 
 A directory cache, built on top of [DirectoryWatcher](https://github.com/yanush/DirectoryWatcher). The cache reads all the files in a directory
