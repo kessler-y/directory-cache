@@ -1,15 +1,13 @@
 {
-    "name": "directory-cache",
-    "version": "1.0.5",
-    "description": "A directory caching util",
-    "main": "lib/DirectoryCache.js",
-    "dependencies": {    
-        "log4js": "*",
-        "underscore": "*",
-        "directory-watcher": "*",
-        "async": "*"
-    },
-    "devDependencies": {
-        "vows": "*"
-    }
+  "name": "directory-cache",
+  "version": "1.0.5",
+  "description": "A directory caching util",
+  "main": "lib/DirectoryCache.js",
+  "dependencies": {
+    "async": "^0.9.0",
+    "debug": "^1.0.2",
+    "directory-watcher": "^2.0.0",
+    "lodash": "^2.4.1"
+  },
+  "devDependencies": {}
 }
