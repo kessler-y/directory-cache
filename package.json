@@ -1,6 +1,6 @@
 {
   "name": "directory-cache",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "A directory cache + watch util",
   "main": "index.js",
   "scripts": {
