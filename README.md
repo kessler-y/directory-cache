@@ -33,6 +33,10 @@ cache.on('delete', function(files) {
 	// etc..
 });
 
+cache.on('error', function(err) {
+	// waaaaaaaaah!
+})
+
 cache.init(function(err) {
 	if (err) 
 		return console.log('ahhhhhhhhhhhh!', err);

@@ -45,8 +45,10 @@ function DirectoryCache(directory, filter) {
 }
 
 /*
-	@param params {String|Object} directory path as string or { directory: '', filter: regex } object
-	@param callback {Function} when its all done :)
+	@param {String|Object} params DirectoryCaceh options
+	@param {String} params.directory directory path
+	@param {Regex} param.filter a regular expression to filter cached files
+	@param {Function} callback when its all done :)
 */
 DirectoryCache.create = function(params, callback) {
 	var cache
@@ -56,16 +58,16 @@ DirectoryCache.create = function(params, callback) {
 	else
 		cache = new DirectoryCache(params.directory, params.filter)
 
-	if (callback)
+	if (callback) 
 		cache.init(callback)
-
+	
 	return cache
 }
 
 /*
 	initialize the cache
 
-	@param initCallback {Function} callback for when the initialization completes
+	@param {Function} initCallback callback for when the initialization completes
 */
 DirectoryCache.prototype.init = function(initCallback) {
 	if (!initCallback)
@@ -104,8 +106,8 @@ function initSequenceDone(initCallback, err) {
 	attach a watcher to this cache, this is an optional method. init() will
 	create a new watcher attachWatcher() is never called
 
-	@param watcher {DirectoryWatcher} a DirectoryWatcher instance (directory-watcher on npm)
-	@param _callback {Function} private api
+	@param {DirectoryWatcher} watcher a DirectoryWatcher instance (directory-watcher on npm)
+	@param {Function} _callback api
 */
 DirectoryCache.prototype.attachWatcher = function(watcher, _callback) {
 	var read = _.bind(readFiles, null, this.directory)	
@@ -154,8 +156,8 @@ DirectoryCache.prototype.stop = function() {
 	add a file to the cache, the file most reside in the cache directory (this is not validated)
 
 	@private
-	@param file {String} name of the file
-	@param data {String|Buffer} initial value of the file content to cache
+	@param {String} file name of the file
+	@param {String|Buffer} data initial value of the file content to cache
 */
 DirectoryCache.prototype._addFile = function(file, data) {	
 	debug('adding %s', file)
@@ -171,8 +173,8 @@ DirectoryCache.prototype._addFile = function(file, data) {
 	update a file in the cache, the file most reside in the cache directory (this is not validated)
 
 	@private
-	@param file {String} name of the file
-	@param data {String|Buffer} updated value of the file content to cache
+	@param {String} file name of the file
+	@param {String|Buffer} data updated value of the file content to cache
 */
 DirectoryCache.prototype._updateFile = function(file, data) {
 	debug('updating %s', file)
@@ -188,6 +190,7 @@ DirectoryCache.prototype._updateFile = function(file, data) {
 	delete a file from the cache. Deletion of files that dont exist are ignored silently
 
 	@private
+	@param {String} file name of the file to delete
 	@returns {String|Buffer} content of the deleted file
 */
 DirectoryCache.prototype._deleteFile = function(file) {
@@ -205,6 +208,7 @@ DirectoryCache.prototype._deleteFile = function(file) {
 }
 
 /*	
+	@param {String} file name of the file to delete
 	@returns {String|Buffer} contents of the file from the cache or undefined if its not there
 */
 DirectoryCache.prototype.getFile = function(file) {
@@ -229,8 +233,8 @@ DirectoryCache.prototype.enableJsonParsing = function() {
 	caching implementation, used by _addFile and _updateFile
 
 	@private
-	@param file {String} the name of the file
-	@param data {String|Buffer} data to cache
+	@param {String} file the name of the file
+	@param {String|Buffer} data data to cache
 */
 DirectoryCache.prototype._cacheFile = function(file, data) {
 	var json = this.parseJson && isJsonFile(file)
