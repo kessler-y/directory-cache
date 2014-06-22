@@ -45,7 +45,7 @@ function DirectoryCache(directory, filter) {
 }
 
 /*
-	@param params {Variant} directory path as string or { directory: '', filter: regex } object
+	@param params {String|Object} directory path as string or { directory: '', filter: regex } object
 	@param callback {Function} when its all done :)
 */
 DirectoryCache.create = function(params, callback) {
@@ -111,7 +111,7 @@ DirectoryCache.prototype.attachWatcher = function(watcher, _callback) {
 	var read = _.bind(readFiles, null, this.directory)	
 	var update = _.bind(updateFiles, this)
 	var add = _.bind(addFiles, this)
-	var deleteOne = _.bind(this.deleteFile, this)
+	var deleteOne = _.bind(this._deleteFile, this)
 	var handleError = _.bind(maybeEmitError, this)
 
 	watcher.on('add', function (files) {	
@@ -132,17 +132,32 @@ DirectoryCache.prototype.attachWatcher = function(watcher, _callback) {
 		_callback(null)
 }
 
+/*
+	get an array of the names of all the files in the cached directory
+
+	@returns {Array}
+*/
 DirectoryCache.prototype.getFilenames = function() {	
 	return _.keys(this.cache)
 }
 
+/*
+	stop this cache, freezing its current state	
+*/
 DirectoryCache.prototype.stop = function() {
 	if (this.watcher) {
 		this.watcher.kill()		
-	} 
+	}
 }
 
-DirectoryCache.prototype.addFile = function(file, data) {	
+/*
+	add a file to the cache, the file most reside in the cache directory (this is not validated)
+
+	@private
+	@param file {String} name of the file
+	@param data {String|Buffer} initial value of the file content to cache
+*/
+DirectoryCache.prototype._addFile = function(file, data) {	
 	debug('adding %s', file)
 
 	data = this._cacheFile(file, data)
@@ -152,34 +167,71 @@ DirectoryCache.prototype.addFile = function(file, data) {
 	this.emit('add', file, data)
 }
 
-DirectoryCache.prototype.updateFile = function(file, data) {
+/*
+	update a file in the cache, the file most reside in the cache directory (this is not validated)
+
+	@private
+	@param file {String} name of the file
+	@param data {String|Buffer} updated value of the file content to cache
+*/
+DirectoryCache.prototype._updateFile = function(file, data) {
 	debug('updating %s', file)
+
+	if (!file in this.cache) throw new Error('cannot update a new file, use _addFile() instead')
 
 	data = this._cacheFile(file, data)
 
 	this.emit('update', file, data)
 }
 
-DirectoryCache.prototype.deleteFile = function(file) {
-	debug('deleting %s', file)
-	var data = this.cache[file]
-	delete this.cache[file]
-	this.count--
-	this.emit('delete', file, data)
+/*
+	delete a file from the cache. Deletion of files that dont exist are ignored silently
+
+	@private
+	@returns {String|Buffer} content of the deleted file
+*/
+DirectoryCache.prototype._deleteFile = function(file) {
+
+	if (file in this.cache) {
+		debug('deleting %s', file)
+		var data = this.cache[file]
+		delete this.cache[file]
+		this.count--
+		this.emit('delete', file, data)
+		return data
+	} else {
+		debug('(almost) silently ignoring deletion of %s (not in cache)', file)
+	}
 }
 
+/*	
+	@returns {String|Buffer} contents of the file from the cache or undefined if its not there
+*/
 DirectoryCache.prototype.getFile = function(file) {
 	return this.cache[file]
 }
 
+/*
+	disable automatic json parsing
+*/
 DirectoryCache.prototype.disableJsonParsing = function() {
 	this.parseJson = false
 }
 
+/*
+	enable automatic json parsing
+*/
 DirectoryCache.prototype.enableJsonParsing = function() {
 	this.parseJson = true
 }
 
+/*
+	caching implementation, used by _addFile and _updateFile
+
+	@private
+	@param file {String} the name of the file
+	@param data {String|Buffer} data to cache
+*/
 DirectoryCache.prototype._cacheFile = function(file, data) {
 	var json = this.parseJson && isJsonFile(file)
 
@@ -215,7 +267,7 @@ function addFiles(files, callback) {
 	for (var file in files) {
 		var data = files[file]
 
-		this.addFile(file, data)
+		this._addFile(file, data)
 	}
 
 	if (callback)
@@ -228,7 +280,7 @@ function updateFiles(files, callback) {
 	for (var file in files) {
 		var data = files[file]
 
-		this.updateFile(file, data)
+		this._updateFile(file, data)
 	}
 
 	if (callback)
