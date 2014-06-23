@@ -158,6 +158,8 @@ DirectoryCache.prototype.enableJsonParsing = function() {
 DirectoryCache.prototype.attachWatcher = function(watcher) {
 	
 	var deleteOne = _.bind(this._deleteFile, this)
+
+	var maybeEmitError = _.bind(this._maybeEmitError, this)
 	
 	var self = this
 	watcher.on('add', function (files) {
@@ -171,6 +173,8 @@ DirectoryCache.prototype.attachWatcher = function(watcher) {
 	watcher.on('delete', function(files) {
 		_.map(files, deleteOne)
 	})
+
+	watcher.on('error', maybeEmitError)
 	
 	this._watcher = watcher
 }
@@ -262,7 +266,7 @@ DirectoryCache.prototype._cacheFile = function(file, data) {
 	return data
 }
 
-function maybeEmitError(err) {
+DirectoryCache.prototype._maybeEmitError = function(err) {
 	if (err)
 		this.emit('error', err)
 }

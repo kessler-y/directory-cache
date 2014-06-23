@@ -83,6 +83,16 @@ describe('DirectoryCache', function () {
 		mockWatcher.emit('change', ['1.json'])
 	})
 
+	it('emits error events', function (done) {
+		cache.attachWatcher(mockWatcher)
+		cache.on('error', function(err) {			
+			assert.ok(err instanceof Error)
+			done()
+		})
+
+		mockWatcher.emit('error', new Error())
+	})
+
 	describe('updates the cache when', function () {
 		it('files are added', function (done) {
 
