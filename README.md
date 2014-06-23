@@ -52,7 +52,7 @@ cache.init(function(err) {
 ### using filters
 
 ```
-// regular expression filter
+// regular expression retains only json files
 
 var DirectoryCache = require('directory-cache');
 
@@ -61,7 +61,7 @@ var cache = DirectoryCache.create({
 	filter: /.*json/
 });
 
-// function filter
+// function filter that retains only json files
 
 var cache2 = DirectoryCache.create({
 	directory: '/path/to/the/moon',

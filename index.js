@@ -34,20 +34,23 @@ function DirectoryCache(directory, filter) {
 
 	this._joinStatReadUpdate = async.seq(this._pathJoin, stat, maybeRead, _.bind(this._updateFile, this))
 
-	this.filter = function(file) { return false }
+	this.filter = function(file) { return true }
 
 	if (filter) {
 		
 		if ($u.isRegExp(filter)) {
+			debug('using regular expression filter')
 			this.filter = function(file) {
-				return !filter.test(file)
+				return filter.test(file)
 			}			
 		} else {
-
+			debug('using user supplied function filter')
 			// assume function
 			this.filter = filter
 		}			
-	} 
+	} else {
+		debug('using noop filter')
+	}
 }
 
 /*
@@ -79,7 +82,7 @@ DirectoryCache.prototype.init = function(initCallback) {
 	if (!initCallback)
 		throw new Error('missing init callback')
 	
-	this.cache = {}	
+	this._cache = {}	
 
 	debug('creating directory cache for [%s]', this.directory)
 	
@@ -93,13 +96,13 @@ DirectoryCache.prototype.init = function(initCallback) {
 			if (err) return done(err)
 
 			attachWatcher(watcher)
-
-			mapFiles(self._joinStatReadAdd, watcher.files, done)
+		
+			mapFiles(self._joinStatReadAdd, _.filter(watcher.files, self.filter), done)
 		})
 
 	} else {
 
-		mapFiles(this._joinStatReadAdd, this._watcher.files, done)
+		mapFiles(this._joinStatReadAdd, _.filter(this._watcher.files, this.filter), done)
 	}
 }
 
@@ -124,7 +127,7 @@ DirectoryCache.prototype.stop = function() {
 	@returns {Array}
 */
 DirectoryCache.prototype.getFilenames = function() {	
-	return _.keys(this.cache)
+	return _.keys(this._cache)
 }
 
 /*	
@@ -132,7 +135,7 @@ DirectoryCache.prototype.getFilenames = function() {
 	@returns {String|Buffer} contents of the file from the cache or undefined if its not there
 */
 DirectoryCache.prototype.getFile = function(file) {
-	return this.cache[file]
+	return this._cache[file]
 }
 
 /*
@@ -163,14 +166,23 @@ DirectoryCache.prototype.attachWatcher = function(watcher) {
 	
 	var self = this
 	watcher.on('add', function (files) {
+
+		files = _.filter(files, self.filter)
+
 		mapFiles(self._joinStatReadAdd, files, maybeEmitError)	
 	})
 
 	watcher.on('change', function (files) {
+		
+		files = _.filter(files, self.filter)
+
 		mapFiles(self._joinStatReadUpdate, files, maybeEmitError)	
 	})
 
 	watcher.on('delete', function(files) {
+		
+		files = _.filter(files, self.filter)
+
 		_.map(files, deleteOne)
 	})
 
@@ -216,7 +228,7 @@ DirectoryCache.prototype._addFile = function(file, data, stat, callback) {
 DirectoryCache.prototype._updateFile = function(file, data, stat, callback) {
 	debug('_updateFile( %s, %s )', file, data)
 
-	if (!file in this.cache) throw new Error('cannot update a new file, use _addFile() instead')
+	if (!file in this._cache) throw new Error('cannot update a new file, use _addFile() instead')
 
 	data = this._cacheFile(file, data)
 
@@ -234,10 +246,10 @@ DirectoryCache.prototype._updateFile = function(file, data, stat, callback) {
 */
 DirectoryCache.prototype._deleteFile = function(file) {
 
-	if (file in this.cache) {
+	if (file in this._cache) {
 		debug('deleting %s', file)
-		var data = this.cache[file]
-		delete this.cache[file]
+		var data = this._cache[file]
+		delete this._cache[file]
 		this.count--
 		this.emit('delete', file, data)
 		return data
@@ -261,7 +273,7 @@ DirectoryCache.prototype._cacheFile = function(file, data) {
 	if (json)
 		data = JSON.parse(data)
 	
-	this.cache[file] = data	
+	this._cache[file] = data	
 
 	return data
 }

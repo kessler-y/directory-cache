@@ -53,7 +53,7 @@ describe('DirectoryCache', function () {
 	})
 
 	it('loads the content of the files in the target directory when created', function () {
-		assert.deepEqual(cache.cache['1.json'], { a: 1 })
+		assert.deepEqual(cache._cache['1.json'], { a: 1 })
 		assert.strictEqual(cache.count, 1)
 	})
 
@@ -101,7 +101,7 @@ describe('DirectoryCache', function () {
 			cache.on('add', function (file, data) {	
 				assert.strictEqual(cache.count, 2)
 				assert.deepEqual(data, { b: 1 })
-				assert.deepEqual(cache.cache['2.json'], { b: 1})
+				assert.deepEqual(cache._cache['2.json'], { b: 1})
 				done()
 			})
 
@@ -149,6 +149,53 @@ describe('DirectoryCache', function () {
 
 			fs.mkdir(path.join(currentTestDir, 'moo'), function(err) {
 				if (err) return done(err)
+			})
+		})
+	})
+
+	
+	describe('filters', function() {
+
+		it('files at creation', function (done) {
+			var cache2 = DirectoryCache.create({
+				directory: currentTestDir,
+				filter: function(file) {
+
+					// filter everything
+					return false
+				}
+			})
+
+			cache2.init(function(err) {
+				if (err) done(err)
+				
+				assert.strictEqual(cache2.count, 0)
+				done()						
+			})	
+		})
+
+		it('new files', function (done) {
+			var cache2 = DirectoryCache.create({
+				directory: currentTestDir,
+				filter: function(file) {
+					
+					// filter everything
+					return file !== '2.json'
+				}
+			})
+
+			cache2.attachWatcher(mockWatcher)
+
+			cache2.init(function(err) {
+				if (err) done(err)
+				
+				assert.strictEqual(cache2.count, 1)
+				
+				mockWatcher.emit('add', ['2.json'])
+				setTimeout(function () {						
+					assert.strictEqual(cache2.count, 1)
+					done()					
+				}, 500)
 			})
 		})
 	})
