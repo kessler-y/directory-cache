@@ -27,7 +27,13 @@ function DirectoryCache(directory, filter) {
 	this.enableJsonParsing()
 
 	this.directory = directory
-	
+
+	this._pathJoin = _.partial(pathJoin, this.directory)
+
+	this._joinStatReadAdd = async.seq(this._pathJoin, stat, maybeRead, _.bind(this._addFile, this))
+
+	this._joinStatReadUpdate = async.seq(this._pathJoin, stat, maybeRead, _.bind(this._updateFile, this))
+
 	this.filter = function(file) { return false }
 
 	if (filter) {
@@ -65,7 +71,7 @@ DirectoryCache.create = function(params, callback) {
 }
 
 /*
-	initialize the cache
+	initialize the cache, this will create a new watcher if one wasn't attached first
 
 	@param {Function} initCallback callback for when the initialization completes
 */
@@ -77,61 +83,39 @@ DirectoryCache.prototype.init = function(initCallback) {
 
 	debug('creating directory cache for [%s]', this.directory)
 	
-	var initSequence = [		
-		_.bind(fs.readdir, fs, this.directory),
-		_.bind(readFiles, null, this.directory),
-		_.bind(addFiles, this)
-	]
+	var done = _.partial(initSequenceDone, this, initCallback)
 
 	if (!this._watcher) {
-		initSequence.push(_.bind(DirectoryWatcher.create, null, this.directory))
-		initSequence.push(_.bind(this.attachWatcher, this))
-	}
+		var attachWatcher = _.bind(this.attachWatcher, this)
+		var self = this
 
-	async.waterfall(initSequence, _.bind(initSequenceDone, this, initCallback))	
-}
+		DirectoryWatcher.create(this.directory, function(err, watcher) {
+			if (err) return done(err)
 
-function initSequenceDone(initCallback, err) {
-	
-	if (err) {
-		debug('ERROR: %s', err.message)
-		initCallback(err)			
+			attachWatcher(watcher)
+
+			mapFiles(self._joinStatReadAdd, watcher.files, done)
+		})
+
 	} else {
-		debug('cache initialized successfully')
-		initCallback(null, this)
+
+		mapFiles(this._joinStatReadAdd, this._watcher.files, done)
 	}
 }
 
 /*
-	attach a watcher to this cache, this is an optional method. init() will
-	create a new watcher attachWatcher() is never called
-
-	@param {DirectoryWatcher} watcher a DirectoryWatcher instance (directory-watcher on npm)
-	@param {Function} _callback api
+	stop this cache, freezing its current state	
 */
-DirectoryCache.prototype.attachWatcher = function(watcher, _callback) {
-	var read = _.bind(readFiles, null, this.directory)	
-	var update = _.bind(updateFiles, this)
-	var add = _.bind(addFiles, this)
-	var deleteOne = _.bind(this._deleteFile, this)
-	var handleError = _.bind(maybeEmitError, this)
+DirectoryCache.prototype.stop = function() {
 
-	watcher.on('add', function (files) {	
-		async.waterfall([_.bind(read, null, files), add], handleError)
-	})
+	if (this.watcher) {
+		
+		this.watcher.removeAllListeners('add')
+		this.watcher.removeAllListeners('change')
+		this.watcher.removeAllListeners('delete')
 
-	watcher.on('change', function (files) {
-		async.waterfall([_.bind(read, null, files), update], handleError)
-	})
-
-	watcher.on('delete', function(files) {
-		_.map(files, deleteOne)
-	})
-	
-	this._watcher = watcher
-
-	if (_callback)
-		_callback(null)
+		this.watcher.kill()		
+	}
 }
 
 /*
@@ -141,70 +125,6 @@ DirectoryCache.prototype.attachWatcher = function(watcher, _callback) {
 */
 DirectoryCache.prototype.getFilenames = function() {	
 	return _.keys(this.cache)
-}
-
-/*
-	stop this cache, freezing its current state	
-*/
-DirectoryCache.prototype.stop = function() {
-	if (this.watcher) {
-		this.watcher.kill()		
-	}
-}
-
-/*
-	add a file to the cache, the file most reside in the cache directory (this is not validated)
-
-	@private
-	@param {String} file name of the file
-	@param {String|Buffer} data initial value of the file content to cache
-*/
-DirectoryCache.prototype._addFile = function(file, data) {	
-	debug('adding %s', file)
-
-	data = this._cacheFile(file, data)
-
-	this.count++
-
-	this.emit('add', file, data)
-}
-
-/*
-	update a file in the cache, the file most reside in the cache directory (this is not validated)
-
-	@private
-	@param {String} file name of the file
-	@param {String|Buffer} data updated value of the file content to cache
-*/
-DirectoryCache.prototype._updateFile = function(file, data) {
-	debug('updating %s', file)
-
-	if (!file in this.cache) throw new Error('cannot update a new file, use _addFile() instead')
-
-	data = this._cacheFile(file, data)
-
-	this.emit('update', file, data)
-}
-
-/*
-	delete a file from the cache. Deletion of files that dont exist are ignored silently
-
-	@private
-	@param {String} file name of the file to delete
-	@returns {String|Buffer} content of the deleted file
-*/
-DirectoryCache.prototype._deleteFile = function(file) {
-
-	if (file in this.cache) {
-		debug('deleting %s', file)
-		var data = this.cache[file]
-		delete this.cache[file]
-		this.count--
-		this.emit('delete', file, data)
-		return data
-	} else {
-		debug('(almost) silently ignoring deletion of %s (not in cache)', file)
-	}
 }
 
 /*	
@@ -227,6 +147,99 @@ DirectoryCache.prototype.disableJsonParsing = function() {
 */
 DirectoryCache.prototype.enableJsonParsing = function() {
 	this.parseJson = true
+}
+
+/*
+	attach a watcher to this cache, this is an optional method. init() will
+	create a new watcher if attachWatcher() is never called
+
+	@param {DirectoryWatcher} watcher a DirectoryWatcher instance (directory-watcher on npm)
+*/
+DirectoryCache.prototype.attachWatcher = function(watcher) {
+	
+	var deleteOne = _.bind(this._deleteFile, this)
+	
+	var self = this
+	watcher.on('add', function (files) {
+		mapFiles(self._joinStatReadAdd, files, maybeEmitError)	
+	})
+
+	watcher.on('change', function (files) {
+		mapFiles(self._joinStatReadUpdate, files, maybeEmitError)	
+	})
+
+	watcher.on('delete', function(files) {
+		_.map(files, deleteOne)
+	})
+	
+	this._watcher = watcher
+}
+
+/*
+	add a file to the cache,
+	the file must reside in the cache directory (this is not enforced)
+
+	@private
+	@param {String} file name of the file
+	@param {String|Buffer} data initial value of the file content to cache
+	@param {fs.Stat} stat a stat object
+	@param {Function} callback
+*/
+DirectoryCache.prototype._addFile = function(file, data, stat, callback) {
+
+	debug('_addFile( %s, %s)', file, data)
+
+	data = this._cacheFile(file, data)
+
+	this.count++
+
+	this.emit('add', file, data)
+
+	callback(null)
+}
+
+/*
+	update a file in the cache,
+	the file must reside in the cache directory (this is not enforced)
+	the file must already exist in the cache (enforced)
+
+	@private
+	@param {String} file name of the file
+	@param {String|Buffer} data updated value of the file content to cache
+	@param {fs.Stat} stat a stat object
+	@param {Function} callback
+*/
+DirectoryCache.prototype._updateFile = function(file, data, stat, callback) {
+	debug('_updateFile( %s, %s )', file, data)
+
+	if (!file in this.cache) throw new Error('cannot update a new file, use _addFile() instead')
+
+	data = this._cacheFile(file, data)
+
+	this.emit('update', file, data)
+
+	callback(null)
+}
+
+/*
+	delete a file from the cache. Deletion of files that dont exist are ignored silently
+
+	@private
+	@param {String} file name of the file to delete
+	@returns {String|Buffer} content of the deleted file
+*/
+DirectoryCache.prototype._deleteFile = function(file) {
+
+	if (file in this.cache) {
+		debug('deleting %s', file)
+		var data = this.cache[file]
+		delete this.cache[file]
+		this.count--
+		this.emit('delete', file, data)
+		return data
+	} else {
+		debug('(almost) silently ignoring deletion of %s (not in cache)', file)
+	}
 }
 
 /*
@@ -254,43 +267,92 @@ function maybeEmitError(err) {
 		this.emit('error', err)
 }
 
-function readFiles(directory, files, callback) {
-	debug('reading files')
+/*
+	used as a subtask in asyncs to do stuff on files
 
-	var functors = {}
+	@param {Function}
+	@param {Array} files
+	@param {Function} callback
 
-	for (var i = 0; i < files.length; i++) 
-		functors[files[i]] = _.bind(fs.readFile, fs, path.join(directory, files[i]))
+	@private
+*/
+function mapFiles(operation, files, callback) {
+	debug('mapFiles(...)')
 
-	async.parallel(functors, callback)
+	async.map(files, operation, callback)
 }
 
-function addFiles(files, callback) {
-	debug('adding files')
+/*
+	path join for async flows
+*/
+function pathJoin(directory, file, callback) {
+	debug('pathJoin(%s, %s)', directory, file)
+	callback(null, path.join(directory, file), file)
+}
+
+/*
 	
-	for (var file in files) {
-		var data = files[file]
+	@param {String} fullpath full path to a file
+	@param {String} file basename
+	@param {Function} callback
 
-		this._addFile(file, data)
-	}
+	@private
+*/
+function stat(fullpath, file, callback) {
+	debug('stat(%s, %s)', fullpath, file)
+	fs.stat(fullpath, function(err, stat) {
+		if (err) return callback(err)
 
-	if (callback)
-		callback(null)
+		callback(null, fullpath, file, stat)
+	})
 }
 
-function updateFiles(files, callback) {
-	debug('updating files')
+/*
+	maybe read a file if indeed its a normal file
+
+	@param {String} fullpath full path to a file
+	@param {String} file basename
+	@param {fs.Stat} stat an fs.Stat object
+	@param {Function} callback
+
+	@private
+*/
+function maybeRead(fullpath, file, stat, callback) {
 	
-	for (var file in files) {
-		var data = files[file]
+	if (stat.isFile()) {
+		fs.readFile(fullpath, function(err, content) {
+			if (err) return callback(err)
 
-		this._updateFile(file, data)
+			callback(null, file, content, stat)
+		})
+	} else {
+		callback(null, file, undefined, stat)
 	}
-
-	if (callback)
-		callback(null)
 }
 
+/*
+	init help
+
+	@private
+*/
+function initSequenceDone(cache, initCallback, err) {
+	
+	if (err) {
+		debug('ERROR: %s', err.message)
+		initCallback(err)			
+	} else {
+		debug('cache initialized successfully')
+		initCallback(null, cache)
+	}
+}
+
+/*
+	checks if a file has a .json extension
+
+	@param {String} filename the name of the file
+
+	@private
+*/
 function isJsonFile(filename) {
 	return filename.slice(-5).toLowerCase() === '.json'
 }

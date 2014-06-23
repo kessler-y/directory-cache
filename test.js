@@ -5,6 +5,8 @@ var path = require('path')
 var async = require('async')
 var _ = require('lodash')
 var fs = require('fs')
+var EventEmitter = require('events').EventEmitter
+
 var TEST_DIR = path.join(__dirname, 'testdir')
 var testNumber = 0
 var currentTestDir
@@ -12,8 +14,14 @@ var currentTestDir
 describe('DirectoryCache', function () {
 	var cache
 
+	var mockWatcher
+
 	beforeEach(function (done) {
 		testNumber++
+
+		mockWatcher = new EventEmitter()
+
+		mockWatcher.files = ['1.json']
 
 		currentTestDir = TEST_DIR + testNumber.toString()
 
@@ -44,9 +52,35 @@ describe('DirectoryCache', function () {
 		rimraf(currentTestDir, done)
 	})
 
-	it('loads the content of the files in the target directory when created', function () {		
+	it('loads the content of the files in the target directory when created', function () {
 		assert.deepEqual(cache.cache['1.json'], { a: 1 })
 		assert.strictEqual(cache.count, 1)
+	})
+
+	it('can use an external watcher, attached before initialization', function (done) {
+		var cache2 = DirectoryCache.create(currentTestDir)
+
+		cache2.attachWatcher(mockWatcher)
+
+		cache2.init(function(err) {
+			if (err) done(err)
+			cache2.on('update', function(file, data) {			
+				assert.strictEqual(file, '1.json')
+				done()
+			})
+
+			mockWatcher.emit('change', ['1.json'])
+		})
+	})
+
+	it('can use an external watcher, attached after initialization', function(done) {
+		cache.attachWatcher(mockWatcher)
+		cache.on('update', function(file, data) {			
+			assert.strictEqual(file, '1.json')
+			done()
+		})
+
+		mockWatcher.emit('change', ['1.json'])
 	})
 
 	describe('updates the cache when', function () {
@@ -92,6 +126,20 @@ describe('DirectoryCache', function () {
 			})
 
 			deleteFile('1.json')
+		})
+
+		it('files that are not normal files raise events but without data', function(done) {
+			assert.strictEqual(cache.count, 1)
+			
+			cache.on('add', function(file, data) {
+				assert.ok(data === undefined)
+				assert.strictEqual(file, 'moo')				
+				done()
+			})
+
+			fs.mkdir(path.join(currentTestDir, 'moo'), function(err) {
+				if (err) return done(err)
+			})
 		})
 	})
 })
